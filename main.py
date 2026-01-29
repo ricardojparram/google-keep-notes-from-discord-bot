@@ -6,7 +6,7 @@ import time
 import discord
 import gkeepapi
 from groq import Groq
-from flask import Flask
+
 from dotenv import load_dotenv
 
 # Load environment variables (for local dev)
@@ -23,17 +23,7 @@ GOOGLE_USER = os.getenv('GOOGLE_USER')
 GOOGLE_APP_PASSWORD = os.getenv('GOOGLE_APP_PASSWORD')
 GOOGLE_MASTER_TOKEN = os.getenv('GOOGLE_MASTER_TOKEN')
 OWNER_ID = int(os.getenv('OWNER_ID', 0))  # 0 will block everyone if not set
-PORT = int(os.getenv('PORT', 8080))
 
-# --- Flask Health Check ---
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "I'm alive"
-
-def run_flask():
-    app.run(host='0.0.0.0', port=PORT)
 
 # --- KeepAPI Wrapper ---
 class KeepClient:
@@ -122,6 +112,7 @@ def analyze_text(text):
     3. Genera un título breve pero descriptivo basado en el contenido.
     4. Elimina saludos (ej: "Hola bot", "Guarda esto") o muletillas irrelevantes.
     5. Devuelve SOLAMENTE un objeto JSON válido con las claves: 'title', 'type', 'content'. NO escribas nada más fuera del JSON.
+    6. Si te piden algo que implique creatividad hazlo, por ejemplo: "Crea una lista de 5 libros que te gustaría leer".
     
     Texto: "{text}"
     """
@@ -217,9 +208,7 @@ async def on_message(message):
 
 # --- Main Execution ---
 if __name__ == '__main__':
-    # Start Flask in a separate thread
-    flask_thread = threading.Thread(target=run_flask, daemon=True)
-    flask_thread.start()
+
     
     # Start Discord Bot
     bot.run(DISCORD_TOKEN)
