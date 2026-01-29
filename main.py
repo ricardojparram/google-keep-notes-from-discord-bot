@@ -140,8 +140,51 @@ def analyze_text(text):
 intents = discord.Intents.default()
 intents.message_content = True
 bot = discord.Client(intents=intents)
-
 keep_client = KeepClient()
+
+# --- Interactive View ---
+class NoteView(discord.ui.View):
+    def __init__(self, title, content, note_type):
+        super().__init__(timeout=None)  # No timeout for now, or could set e.g. 600
+        self.title = title
+        self.content = content
+        self.note_type = note_type
+        self.keep_client = keep_client # Access global client
+
+    @discord.ui.button(label="Guardar en Keep", style=discord.ButtonStyle.green, emoji="💾")
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer() # Acknowledge interaction to prevent timeout
+        
+        try:
+            if self.note_type == 'LIST' and isinstance(self.content, list):
+                self.keep_client.create_list(self.title, self.content)
+                msg = f"✅ **Lista Guardada**: {self.title}"
+            else:
+                # Ensure content is string for notes
+                text_content = self.content
+                if isinstance(self.content, list):
+                    text_content = "\n".join(self.content)
+                self.keep_client.create_note(self.title, text_content)
+                msg = f"✅ **Nota Guardada**: {self.title}"
+
+            # Disable buttons after success
+            for child in self.children:
+                child.disabled = True
+            
+            await interaction.followup.edit_message(message_id=interaction.message.id, content=msg, view=self, embed=None)
+
+        except Exception as e:
+            logger.error(f"Keep Save Error: {e}")
+            await interaction.followup.send(f"❌ Error al guardar: {e}", ephemeral=True)
+
+    @discord.ui.button(label="Descartar", style=discord.ButtonStyle.red, emoji="🗑️")
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Disable buttons
+        for child in self.children:
+            child.disabled = True
+        
+        await interaction.response.edit_message(content="❌ **Nota Descartada**", view=self, embed=None)
+
 
 @bot.event
 async def on_ready():
@@ -185,26 +228,28 @@ async def on_message(message):
     note_type = analysis.get('type', 'NOTE')
     content = analysis.get('content')
 
-    try:
-        if note_type == 'LIST' and isinstance(content, list):
-            keep_client.create_list(title, content)
-            response_msg = f"Lista creada: **{title}**"
-        else:
-            # Fallback to note if type is list but content isn't, or type is note
-            # Ensure content is string
-            if isinstance(content, list):
-                content = "\n".join(content)
-            keep_client.create_note(title, content)
-            response_msg = f"Nota creada: **{title}**"
-            
-        await message.add_reaction('✅')
-        # Optional: Reply with confirmation
-        # await message.reply(response_msg)
-        
-    except Exception as e:
-        logger.error(f"Keep Operation Failed: {e}")
-        await message.add_reaction('❌')
-        await message.channel.send(f"Error guardando en Keep: {str(e)}")
+    # Create Embed for Preview
+    embed = discord.Embed(title=f"📝 Preview: {title}", color=0x3498db)
+    
+    if note_type == 'LIST' and isinstance(content, list):
+        # Format list for preview
+        preview_text = "\n".join([f"• {item}" for item in content])
+        embed.description = preview_text[:2000] # Discord limit
+        embed.set_footer(text="Tipo: Lista")
+    else:
+        # Format note for preview
+        if isinstance(content, list):
+             content = "\n".join(content)
+        embed.description = content[:2000]
+        embed.set_footer(text="Tipo: Nota")
+
+    # Send Preview with Buttons
+    view = NoteView(title, content, note_type)
+    await message.channel.send(content=f"¿Guardar esta nota?", embed=embed, view=view)
+    
+    # Remove original processing feedback
+    # await message.add_reaction('✅')
+
 
 # --- Main Execution ---
 if __name__ == '__main__':
