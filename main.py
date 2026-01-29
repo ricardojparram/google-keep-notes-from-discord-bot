@@ -5,7 +5,7 @@ import logging
 import time
 import discord
 import gkeepapi
-import google.generativeai as genai
+from google import genai
 from flask import Flask
 from dotenv import load_dotenv
 
@@ -101,16 +101,20 @@ class KeepClient:
         return glist
 
 # --- Gemini Wrapper ---
+client = None
+
 def configure_genai():
-    genai.configure(api_key=GEMINI_API_KEY)
+    global client
+    client = genai.Client(api_key=GEMINI_API_KEY)
 
 def analyze_text(text):
     """
     Sends text to Gemini to determine if it should be a NOTE or LIST.
     Returns: JSON dict {'title': str, 'type': 'NOTE'|'LIST', 'content': str|list}
     """
-    model = genai.GenerativeModel('gemini-pro')
-    
+    if not client:
+        configure_genai()
+
     prompt = f"""
     Analiza el siguiente texto y extrae un título y el contenido.
     Determina si el formato más adecuado es una NOTA ('NOTE') o una LISTA ('LIST').
@@ -126,10 +130,16 @@ def analyze_text(text):
     """
     
     try:
-        response = model.generate_content(prompt)
-        # Cleanup markup if Gemini adds markdown code blocks
-        clean_text = response.text.replace('```json', '').replace('```', '').strip()
-        data = json.loads(clean_text)
+        response = client.models.generate_content(
+            model='gemini-2.0-flash', 
+            contents=prompt,
+            config={
+                'response_mime_type': 'application/json'
+            }
+        )
+        # With response_mime_type='application/json', the text usually comes clean,
+        # but parsing is still needed.
+        data = json.loads(response.text)
         return data
     except Exception as e:
         logger.error(f"Gemini Error: {e}")
