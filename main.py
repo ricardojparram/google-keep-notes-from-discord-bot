@@ -21,6 +21,7 @@ DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 GOOGLE_USER = os.getenv('GOOGLE_USER')
 GOOGLE_APP_PASSWORD = os.getenv('GOOGLE_APP_PASSWORD')
+GOOGLE_MASTER_TOKEN = os.getenv('GOOGLE_MASTER_TOKEN')
 OWNER_ID = int(os.getenv('OWNER_ID', 0))  # 0 will block everyone if not set
 PORT = int(os.getenv('PORT', 8080))
 
@@ -38,28 +39,24 @@ def run_flask():
 class KeepClient:
     def __init__(self):
         self.keep = gkeepapi.Keep()
-        self.master_token = None
     
     def login(self):
         """Attempts to login using master token or credentials."""
         try:
-            # Note: Render is ephemeral, so saving token to file is not reliable across deploys.
-            # We rely on re-login or in-memory token for the session.
-            # Ideally, one would save the master_token to a persistent DB or Env Var if available.
-            
             logger.info("KeepClient: Attempting login...")
             
-            # Since we don't have a persistent token store here easily without a DB, 
-            # we will just use fresh login each startup or resume if we had it in memory.
-            # If you want to use a master token from ENV, we could check that.
-            
-            success = self.keep.login(GOOGLE_USER, GOOGLE_APP_PASSWORD)
-            if success:
-                self.master_token = self.keep.getMasterToken()
-                logger.info("KeepClient: Login successful.")
+            if GOOGLE_MASTER_TOKEN:
+                logger.info("KeepClient: Using Master Token...")
+                # authenticate returns None on success, raises exception on failure
+                self.keep.authenticate(GOOGLE_USER, GOOGLE_MASTER_TOKEN)
+                logger.info("KeepClient: Authenticated with Master Token successfully.")
+            elif GOOGLE_USER and GOOGLE_APP_PASSWORD:
+                logger.info("KeepClient: Using Email/Password...")
+                self.keep.authenticate(GOOGLE_USER, GOOGLE_APP_PASSWORD)
+                token = self.keep.getMasterToken()
+                logger.info(f"KeepClient: Authenticated. Master Token extracted (Starts with: {token[:5]}...)")
             else:
-                logger.error("KeepClient: Login failed.")
-                raise Exception("Failed to login to Google Keep.")
+                raise Exception("No credentials provided (Need GOOGLE_MASTER_TOKEN or USER/APP_PASSWORD)")
                 
         except Exception as e:
             logger.error(f"KeepClient: Error during login: {e}")
