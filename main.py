@@ -5,7 +5,7 @@ import logging
 import time
 import discord
 import gkeepapi
-from google import genai
+from groq import Groq
 from flask import Flask
 from dotenv import load_dotenv
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # --- Configuration ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 GOOGLE_USER = os.getenv('GOOGLE_USER')
 GOOGLE_APP_PASSWORD = os.getenv('GOOGLE_APP_PASSWORD')
 GOOGLE_MASTER_TOKEN = os.getenv('GOOGLE_MASTER_TOKEN')
@@ -97,20 +97,20 @@ class KeepClient:
         self._final_sync()
         return glist
 
-# --- Gemini Wrapper ---
+# --- Groq Wrapper ---
 client = None
 
-def configure_genai():
+def configure_groq():
     global client
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    client = Groq(api_key=GROQ_API_KEY)
 
 def analyze_text(text):
     """
-    Sends text to Gemini to determine if it should be a NOTE or LIST.
+    Sends text to Groq to determine if it should be a NOTE or LIST.
     Returns: JSON dict {'title': str, 'type': 'NOTE'|'LIST', 'content': str|list}
     """
     if not client:
-        configure_genai()
+        configure_groq()
 
     prompt = f"""
     Analiza el siguiente texto y extrae un título y el contenido.
@@ -121,25 +121,27 @@ def analyze_text(text):
     2. Si es texto corrido, usa 'NOTE'.
     3. Genera un título breve pero descriptivo basado en el contenido.
     4. Elimina saludos (ej: "Hola bot", "Guarda esto") o muletillas irrelevantes.
-    5. Devuelve SOLAMENTE un objeto JSON válido con las claves: 'title', 'type', 'content'.
+    5. Devuelve SOLAMENTE un objeto JSON válido con las claves: 'title', 'type', 'content'. NO escribas nada más fuera del JSON.
     
     Texto: "{text}"
     """
     
     try:
-        response = client.models.generate_content(
-            model='gemini-2.0-flash', 
-            contents=prompt,
-            config={
-                'response_mime_type': 'application/json'
-            }
+        completion = client.chat.completions.create(
+            model="llama3-70b-8192",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that processes text into structured JSON data. Output only valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0,
+            response_format={"type": "json_object"}
         )
-        # With response_mime_type='application/json', the text usually comes clean,
-        # but parsing is still needed.
-        data = json.loads(response.text)
+        
+        response_content = completion.choices[0].message.content
+        data = json.loads(response_content)
         return data
     except Exception as e:
-        logger.error(f"Gemini Error: {e}")
+        logger.error(f"Groq Error: {e}")
         return None
 
 # --- Discord Bot ---
@@ -153,7 +155,7 @@ keep_client = KeepClient()
 async def on_ready():
     logger.info(f'Logged in as {bot.user}')
     # Initialize services
-    configure_genai()
+    configure_groq()
     try:
         keep_client.login()
     except Exception as e:

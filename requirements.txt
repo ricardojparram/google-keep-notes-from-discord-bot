@@ -1,6 +1,6 @@
 discord.py
 gkeepapi
-google-genai
+groq
 flask
 gunicorn
 python-dotenv
