@@ -21,9 +21,9 @@ logger = logging.getLogger(__name__)
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 GOOGLE_USER = os.getenv('GOOGLE_USER')
-GOOGLE_APP_PASSWORD = os.getenv('GOOGLE_APP_PASSWORD')
 GOOGLE_MASTER_TOKEN = os.getenv('GOOGLE_MASTER_TOKEN')
 OWNER_ID = int(os.getenv('OWNER_ID', 0))  # 0 will block everyone if not set
+DISCORD_CHANNEL_ID = os.getenv('DISCORD_CHANNEL_ID')
 
 
 # --- KeepAPI Wrapper ---
@@ -41,13 +41,8 @@ class KeepClient:
                 # authenticate returns None on success, raises exception on failure
                 self.keep.authenticate(GOOGLE_USER, GOOGLE_MASTER_TOKEN)
                 logger.info("KeepClient: Authenticated with Master Token successfully.")
-            elif GOOGLE_USER and GOOGLE_APP_PASSWORD:
-                logger.info("KeepClient: Using Email/Password...")
-                self.keep.authenticate(GOOGLE_USER, GOOGLE_APP_PASSWORD)
-                token = self.keep.getMasterToken()
-                logger.info(f"KeepClient: Authenticated. Master Token extracted (Starts with: {token[:5]}...)")
             else:
-                raise Exception("No credentials provided (Need GOOGLE_MASTER_TOKEN or USER/APP_PASSWORD)")
+                raise Exception("No credentials provided (Need GOOGLE_MASTER_TOKEN)")
                 
         except Exception as e:
             logger.error(f"KeepClient: Error during login: {e}")
@@ -205,6 +200,10 @@ async def on_message(message):
 
     # Security Check: Only OWNER_ID
     if message.author.id != OWNER_ID:
+        return
+
+    # Channel Check: Only specific channel if set
+    if DISCORD_CHANNEL_ID and str(message.channel.id) != str(DISCORD_CHANNEL_ID):
         return
 
     # React to acknowledge receipt
