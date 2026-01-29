@@ -3,3 +3,4 @@ gkeepapi
 groq
 
 python-dotenv
+flask

@@ -8,6 +8,7 @@ import gkeepapi
 from groq import Groq
 
 from dotenv import load_dotenv
+from keep_alive import keep_alive
 
 # Load environment variables (for local dev)
 load_dotenv()
@@ -254,6 +255,9 @@ async def on_message(message):
 # --- Main Execution ---
 if __name__ == '__main__':
 
+    
+    # Start Keep-Alive Server
+    keep_alive()
     
     # Start Discord Bot
     bot.run(DISCORD_TOKEN)
