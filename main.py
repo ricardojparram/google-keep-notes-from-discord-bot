@@ -128,7 +128,8 @@ def analyze_text(text):
     
     try:
         completion = client.chat.completions.create(
-            model="llama3-70b-8192",
+            # llama3-70b-8192 está deprecado. Usamos llama-3.3-70b-versatile
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that processes text into structured JSON data. Output only valid JSON."},
                 {"role": "user", "content": prompt}
