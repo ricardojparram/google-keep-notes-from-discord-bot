@@ -17,6 +17,10 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Reduce Discord library verbosity (only show warnings and errors)
+discord_logger = logging.getLogger('discord')
+discord_logger.setLevel(logging.WARNING)
+
 # --- Configuration ---
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
@@ -253,10 +257,42 @@ async def on_message(message):
 
 # --- Main Execution ---
 if __name__ == '__main__':
-
+    # Validate critical environment variables
+    if not DISCORD_TOKEN:
+        logger.critical("DISCORD_TOKEN is not set!")
+        exit(1)
     
     # Start Keep-Alive Server
+    logger.info("Starting Keep-Alive Flask server...")
     keep_alive()
+    logger.info("Flask server started on PORT (Render will assign)")
     
-    # Start Discord Bot
-    bot.run(DISCORD_TOKEN)
+    # Start Discord Bot with retry logic for rate limiting
+    max_retries = 3
+    retry_delay = 60  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Starting Discord bot (attempt {attempt + 1}/{max_retries})...")
+            bot.run(DISCORD_TOKEN)
+            break  # If we reach here, connection was successful
+        except discord.errors.HTTPException as e:
+            # Check if it's a rate limit error (429 or Error 1015)
+            if e.status == 429 or "rate limit" in str(e).lower() or "1015" in str(e):
+                wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
+                logger.warning(f"⚠️  Rate limited by Discord (Error {e.status}). Waiting {wait_time} seconds before retry...")
+                logger.info("💡 This is usually temporary. Discord/Cloudflare blocks excessive login attempts.")
+                if attempt < max_retries - 1:
+                    time.sleep(wait_time)
+                else:
+                    logger.critical("❌ Max retries reached. Please wait 15-30 minutes and try again.")
+                    exit(1)
+            else:
+                logger.error(f"HTTP error: {e}")
+                raise
+        except discord.errors.LoginFailure:
+            logger.critical("❌ Invalid Discord token! Check DISCORD_TOKEN environment variable.")
+            exit(1)
+        except Exception as e:
+            logger.critical(f"❌ Failed to start Discord bot: {e}")
+            raise
